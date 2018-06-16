@@ -28,6 +28,19 @@ def parseProfiles(ratings):
     return userProfiles, itemProfiles
 
 
+def saveProfiles(userProfiles, itemProfiles, userProfileFilePath, itemProfileFilePath):
+    saveDictionary(userProfileFilePath, userProfiles)
+    saveDictionary(itemProfileFilePath, itemProfiles)
+
+
+def saveDictionary(filePath, dict):
+    file = open(filePath, "wb")
+    rows = []
+    for id in dict:
+        rows.append(str(id) + ',' + str(dict[id][1]) + ',' + str(dict[id][2]) + '\n')
+    stringContent = ''.join(rows)
+    file.write(stringContent)
+    file.close()
 
 
 argv = sys.argv
