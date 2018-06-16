@@ -3,10 +3,29 @@ import sys
 
 
 def extractProfiles(inputFile, userProfileFilePath, itemProfileFilePath):
-    ratings = np.genfromtxt(inputFile, delimiter=',', dtype=[int, int, float, long])[1:]
-    userProfiles = parseUserProfiles(ratings)
-    itemProfiles = parseItemProfiles(ratings)
+    ratings = np.genfromtxt(inputFile, delimiter=',', dtype=[int, int, float, long])[1:]# ignore table's title
+    userProfiles, itemProfiles = parseProfiles(ratings)
     saveProfiles(userProfiles, itemProfiles, userProfileFilePath, itemProfileFilePath)
+
+
+def parseProfiles(ratings):
+    userProfiles = {}
+    itemProfiles = {}
+    for row in ratings:
+        (userID, itemID, itemRating, ts) = row
+        if not userProfiles.has_key(userID):
+            userProfiles[userID] = [userID, [], []]
+
+        userProfiles[userID][1].append(itemID)
+        userProfiles[userID][2].append(itemRating)
+
+        if not itemProfiles.has_key(itemID):
+            itemProfiles[itemID] = [itemID, [], []]
+
+        itemProfiles[itemID][1].append(userID)
+        itemProfiles[itemID][2].append(itemRating)
+
+    return userProfiles, itemProfiles
 
 
 
