@@ -43,12 +43,14 @@ def saveDictionary(filePath, dict):
     file.close()
 
 
-argv = sys.argv
-if len(argv) >= 5 and argv[1] == 'ExtractProfiles':
-    inputFile = argv[2]
-    userProfileFilePath = argv[3]
-    itemProfileFilePath = argv[4]
-    extractProfiles(inputFile, userProfileFilePath, itemProfileFilePath)
-else:
-    print 'Invalid arguments, should be in the form: ' \
-          'ExtractProfiles [the rating input file] [user profile csv output directory] [item profile csv output directory].'
+
+if __name__ == '__main__':
+    argv = sys.argv
+    if len(argv) >= 5 and argv[1] == 'ExtractProfiles':
+        inputFile = argv[2]
+        userProfileFilePath = argv[3]
+        itemProfileFilePath = argv[4]
+        extractProfiles(inputFile, userProfileFilePath, itemProfileFilePath)
+    else:
+        print 'Invalid arguments, should be in the form: ' \
+              'ExtractProfiles [the rating input file] [user profile csv output directory] [item profile csv output directory].'
