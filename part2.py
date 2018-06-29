@@ -9,9 +9,9 @@ import threading
 
 
 def extractCB(ratingsFilePath, k = 4, t = 10, epsilon = 0.01, usersClusteringPath = "U.csv", itemsClusteringPath = "V.csv",  codebookPath = "B.csv"):
-    global dfUserProfiles, vArray, uArray, bArray, globalSystemRatingsAverage
+    global dfUserProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict
     l = k
-    np.random.seed(10)
+    np.random.seed(10)#TODO remove seed
 
 
     print strftime("%Y-%m-%d %H:%M:%S", gmtime())
@@ -26,18 +26,27 @@ def extractCB(ratingsFilePath, k = 4, t = 10, epsilon = 0.01, usersClusteringPat
     userCount = len(userProfiles)
     itemCount = len(itemProfiles)
     vArray = pd.DataFrame({"itemID" : itemProfiles.keys(), "cluster" : np.random.randint(0, l-1, len(itemProfiles), int)})
+    vArrayDict = vArray.set_index("itemID")["cluster"].to_dict()
     uArray = pd.DataFrame({"userID" : userProfiles.keys(), "cluster" : np.random.randint(0, k - 1, len(userProfiles), int)})
+    uArrayDict = uArray.set_index("userID")["cluster"].to_dict()
     bArray = pd.DataFrame(np.zeros([k, l]))
 
     print strftime("%Y-%m-%d %H:%M:%S", gmtime())
 
-    p = Pool(20)
+    p = Pool(8)
     indexes = [(i, j) for i in range(0, k) for j in range(0,l)]
     results = p.map(calculateB, indexes)
     for (i, j, result) in results:
         bArray.at[i, j] = result
     print strftime("%Y-%m-%d %H:%M:%S", gmtime())
     t = 1
+    p = Pool(8)
+    userIDs = userProfiles.keys()
+    newClusters = p.map(getBestUserCluster, userIDs)
+    uArrayDict = dict(newClusters)
+    uArray = pd.DataFrame({"userID" : uArrayDict.keys(), "cluster" : uArrayDict.values()})
+
+
 
 
     print ""
@@ -58,11 +67,36 @@ def calculateB((i, j)):
         result = sum / ratingsCount
     else:
         result = globalSystemRatingsAverage
-    print i,j
     return (i, j, result)
 
+def getBestUserCluster(userID):
+    k = 4 #TODO get from upper scope
+    currentBest = calculateClusterMSE(userID, 0)
+    bestCluster = 0
+    for clusterID in range(1, k):
+        res = calculateClusterMSE(userID, clusterID)
+        if res < currentBest:
+            currentBest = res
+            bestCluster = clusterID
+    return (userID, bestCluster)
 
-def extractcluster(clusterMap, clusterID):
+
+def calculateClusterMSE(userID, forClusterID):
+    ratings = pd.DataFrame({"itemID" : dfUserProfiles.at[userID, "items"], "rating" : dfUserProfiles.at[userID, "ratings"]})#TODO optimize with dictionary
+    results = ratings.apply(lambda row: calculateError(row, forClusterID), axis=1)
+    return results["result"].sum()
+
+def calculateError(row, forClusterID):
+    itemID = row["itemID"]
+    rating = row["rating"]
+    itemCluster = vArrayDict[itemID]
+    bRating = bArray.at[forClusterID, itemCluster]
+    result = (rating - bRating)**2
+    return pd.Series([result], index=["result"])
+
+
+
+def extractCluster(clusterMap, clusterID):
     clusterObjects = []
     for i in range(0, len(clusterMap[0])):
         if clusterMap[1, i] == clusterID:
