@@ -1,17 +1,25 @@
 import numpy as np
 import pandas as pd
+import os
 from part1 import parseProfiles
 from time import gmtime, strftime
 from multiprocessing import Pool
 import math
 
 MAX_THREAD_POOL = 6
+V_CACHE_FILE_PATH = "v.csv"
+U_CACHE_FILE_PATH = "u.csv"
+B_CACHE_FILE_PATH = "b.csv"
 
 
 def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersClusteringPath = "U.csv", itemsClusteringPath = "V.csv",  codebookPath = "B.csv"):
     global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles, globalRatingsCount
     l = k
     np.random.seed(10)#TODO remove seed
+
+    found = cacheLookup(k, l)
+    if found:
+        return
 
 
     print strftime("start - %Y-%m-%d %H:%M:%S", gmtime())
@@ -88,6 +96,9 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
         print "old RSME - {} new RSME - {} current diff - {}".format(currentRMSE, newRSME, currentRMSEDiff)
         currentRMSE = newRSME
 
+    vArray.to_csv(V_CACHE_FILE_PATH)
+    uArray.to_csv(U_CACHE_FILE_PATH)
+    bArray.to_csv(B_CACHE_FILE_PATH)
     print strftime("trainig completed - %Y-%m-%d %H:%M:%S", gmtime())
     return
 
@@ -191,6 +202,12 @@ def getErrorSum(itemID):
 
     return errorSum
 
-
+def cacheLookup(k, l):
+    found = os.path.isfile(U_CACHE_FILE_PATH) and os.path.isfile(V_CACHE_FILE_PATH) and os.path.isfile(B_CACHE_FILE_PATH)
+    if found:
+        uArray = pd.read_csv(U_CACHE_FILE_PATH)
+        vArray = pd.read_csv(V_CACHE_FILE_PATH)
+        bArray = pd.read_csv(B_CACHE_FILE_PATH)
+    return found
 
 extractCB("ratings.csv")
