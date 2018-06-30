@@ -333,7 +333,11 @@ def parseArguments(args):
 
 
 
+###################################################################
+## main
+###################################################################
 
+app.run(debug=True)
 if __name__ == '__main__':
     args = sys.argv
     if len(args) > 1 and args[1] == "ExtractCB":
@@ -349,4 +353,29 @@ if __name__ == '__main__':
               "I assumed you will run ExtractCB before running the server handling the post requests"
         exit(1)
 
-    app.run(debug=True)
+
+###################################################################
+## handle post request
+###################################################################
+
+@app.route('/', methods=['POST'])
+def recommend():
+    # parse params:
+    userID = request.values.get('userid')
+    if userID is None:
+        print("userID was not provided in the request")
+        return jsonify([])
+    N = request.values.get('n')
+    if N is None:
+        print("userID was not provided in the request")
+        return jsonify([])
+    userID = int(userID)
+    N = int(N)
+    recommendationJson = jsonify(getRecommendation(userID, N))
+    print "response contents: ", recommendationJson
+    return recommendationJson
+
+
+
+def getRecommendation(userID, N):
+    return ""
