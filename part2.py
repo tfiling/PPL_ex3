@@ -1,13 +1,12 @@
 import numpy as np
 import pandas as pd
-import os
 from part1 import parseProfiles
 from time import gmtime, strftime
 from multiprocessing import Pool
 
 
 def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersClusteringPath = "U.csv", itemsClusteringPath = "V.csv",  codebookPath = "B.csv"):
-    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict
+    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles
     l = k
     np.random.seed(10)#TODO remove seed
 
@@ -69,6 +68,20 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
         vArrayDict = dict(newClusters)
         vArray = pd.DataFrame({"itemID" : uArrayDict.keys(), "cluster" : uArrayDict.values()})
 
+        # calculate codebook - step 13
+        p = Pool(8)
+        indexes = [(i, j) for i in range(0, k) for j in range(0, l)]
+        results = p.map(calculateB, indexes)
+        p.close()
+        print strftime("B1 calculated - %Y-%m-%d %H:%M:%S", gmtime())
+        for (i, j, result) in results:
+            bArray.at[i, j] = result
+
+        # RSME = calculateRSME()
+
+
+
+
 
     print ""
     return
@@ -102,30 +115,21 @@ def calculateB((i, j)):
 ###################################################################
 
 def getBestUserCluster(userID):
-    k = 4 #TODO get from upper scope
-    currentBest = calculateUserClusterMSE(userID, 0)
-    bestCluster = 0
-    for clusterID in range(1, k):
-        res = calculateUserClusterMSE(userID, clusterID)
-        if res < currentBest:
-            currentBest = res
-            bestCluster = clusterID
-    return (userID, bestCluster)
-
-
-def calculateUserClusterMSE(userID, forClusterID):
-    def calculateError(row, forClusterID):
-        itemID = row["itemID"]
-        rating = row["rating"]
+    k = 4  # TODO get from upper scope
+    items = userProfiles[userID][1]
+    itemRankings = userProfiles[userID][2]
+    clusterErrors = np.zeros(k)
+    for i in range(0, len(items)):
+        itemID = items[i]
+        rating = itemRankings[i]
         itemCluster = vArrayDict[itemID]
-        bRating = bArray.at[forClusterID, itemCluster]
-        result = (rating - bRating) ** 2
-        return pd.Series([result], index=["result"])
+        for cluster in range(0, k):
+            bRating = bArray.at[cluster, itemCluster]
+            result = (rating - bRating) ** 2
+            clusterErrors[cluster] += result
 
-    ratings = pd.DataFrame({"itemID" : dfUserProfiles.at[userID, "items"], "rating" : dfUserProfiles.at[userID, "ratings"]})#TODO optimize with dictionary
-    results = ratings.apply(lambda row: calculateError(row, forClusterID), axis=1)
-    return results["result"].sum()
-
+    bestCluster = clusterErrors.argmin()
+    return (userID, bestCluster)
 
 
 
@@ -135,29 +139,28 @@ def calculateUserClusterMSE(userID, forClusterID):
 
 def getBestItemCluster(itemID):
     l = 4 #TODO get from upper scope
-    currentBest = calculateItemClusterMSE(itemID, 0)
-    bestCluster = 0
-    for clusterID in range(1, l):
-        res = calculateItemClusterMSE(itemID, clusterID)
-        if res < currentBest:
-            currentBest = res
-            bestCluster = clusterID
+
+    users = itemProfiles[itemID][1]
+    userRankings = itemProfiles[itemID][2]
+    clusterErrors = np.zeros(l)
+    for i in range(0, len(users)):
+        userID = users[i]
+        rating = userRankings[i]
+        userCluster = uArrayDict[userID]
+        for cluster in range(0, l):
+            bRating = bArray.at[userCluster, cluster]
+            result = (rating - bRating) ** 2
+            clusterErrors[cluster] += result
+
+    bestCluster = clusterErrors.argmin()
     return (itemID, bestCluster)
 
 
-def calculateItemClusterMSE(userID, forClusterID):
+###################################################################
+## calculateRSME
+###################################################################
 
-    def calculateError(row, forClusterID):
-        userID = row["userID"]
-        rating = row["rating"]
-        userCluster = uArrayDict[userID]
-        bRating = bArray.at[userCluster, forClusterID]
-        result = (rating - bRating) ** 2
-        return pd.Series([result], index=["result"])
-
-    ratings = pd.DataFrame({"userID" : dfItemProfiles.at[userID, "users"], "rating" : dfItemProfiles.at[userID, "ratings"]})#TODO optimize with dictionary
-    results = ratings.apply(lambda row: calculateError(row, forClusterID), axis=1)
-    return results["result"].sum()
+# def calculateRSME():
 
 
 
