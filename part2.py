@@ -6,6 +6,7 @@ from part1 import parseProfiles
 from time import gmtime, strftime
 from multiprocessing import Pool
 import math
+import ast
 
 from flask import Flask
 from flask import jsonify
@@ -17,6 +18,7 @@ MAX_THREAD_POOL = 6
 V_CACHE_FILE_PATH = "v.csv"
 U_CACHE_FILE_PATH = "u.csv"
 B_CACHE_FILE_PATH = "b.csv"
+USERS_CACHE_FILE_PATH = "USERS_CACHE_FILE.csv"
 
 
 def extractCB(ratingsFilePath, _k = 20, maxSteps = 10, epsilon = 0.01, usersClusteringPath = U_CACHE_FILE_PATH, itemsClusteringPath = V_CACHE_FILE_PATH,  codebookPath = B_CACHE_FILE_PATH):
@@ -235,9 +237,11 @@ def getErrorSum(itemID):
 def cacheLookup():
     found = os.path.isfile(U_CACHE_FILE_PATH) and os.path.isfile(V_CACHE_FILE_PATH) and os.path.isfile(B_CACHE_FILE_PATH)
     if found:
+        global uArray, vArray, bArray, usersCache
         uArray = pd.read_csv(U_CACHE_FILE_PATH)
         vArray = pd.read_csv(V_CACHE_FILE_PATH)
         bArray = pd.read_csv(B_CACHE_FILE_PATH)
+        usersCache = pd.read_csv(USERS_CACHE_FILE_PATH)
     return found
 
 
@@ -332,28 +336,6 @@ def parseArguments(args):
     return rating_file, k, t, epsilon, u_file, v_file, b_file
 
 
-
-###################################################################
-## main
-###################################################################
-
-if __name__ == '__main__':
-    args = sys.argv
-    if len(args) > 1 and args[1] == "ExtractCB":
-        rating_file, k, t, epsilon, u_file, v_file, b_file = parseArguments(args)
-        extractCB(rating_file, k, t, epsilon, u_file, v_file, b_file)
-    else:
-        app.run(debug=True)
-        print "running regular webserver (without training), the clusters will be loaded from previous runs!\n" \
-              "please be sure you applied ExtractCB first"
-
-    found = cacheLookup()
-    if not found:
-        print "no cached data found! Plaese run ExtractCB method and then run part 2 again\n" \
-              "I assumed you will run ExtractCB before running the server handling the post requests"
-        exit(1)
-
-
 ###################################################################
 ## handle post request
 ###################################################################
@@ -376,6 +358,57 @@ def recommend():
     return recommendationJson
 
 
-
 def getRecommendation(userID, N):
-    return ""
+    recommendationList = []
+    cacheLookup()
+    if len(usersCache[usersCache["userID"] == userID]) == 0:
+        print("requested userID could not be found.\n "
+              "all ratings by this user were selected to be in the test dataset and therefore there is not data regarding this user!\n"
+              "plese note that each row in the input files had ~80% to be in the train dataset (see splitDataset function)")
+    else:
+        user = usersCache[usersCache["userID"] == userID].loc[0].to_dict()
+        userCluster = uArray[uArray["userID"] == userID]["cluster"][0]
+        itemsClusterRatings = bArray.loc[userCluster][1:].sort_values(ascending=False)
+        alreadyRecommended = user["items"] # prevent recommendation of items the user laready rated
+        if type(alreadyRecommended) == str:
+            alreadyRecommended = ast.literal_eval(alreadyRecommended) # parse the string representation of the the list into an actual list
+
+        for clusterID in itemsClusterRatings.index:
+            clusterItems = vArray[vArray["cluster"] == int(clusterID)]["itemID"].values
+            items = list(set(clusterItems) - set(alreadyRecommended))
+            alreadyRecommended.extend(items)
+            recommendationList.extend(items)
+            if len(recommendationList) > N:
+                break
+
+        recommendationList = recommendationList[:N] # trim the resulted list
+    return recommendationList
+
+
+###################################################################
+## main
+###################################################################
+
+if __name__ == '__main__':
+    print "IMPORTANT! - please note I expect you to:\n" \
+          "1 - run part2 with ExtractCB first, the clusters will be calculated and saved\n" \
+          "2 - run part2 without arguments which will load the clusters and provide recommendation\n\n" \
+          "according to the assumptions provided in the faculty answers in the forum\n"
+
+    args = sys.argv
+    if len(args) > 1 and args[1] == "ExtractCB":
+        rating_file, k, t, epsilon, u_file, v_file, b_file = parseArguments(args)
+        extractCB(rating_file, k, t, epsilon, u_file, v_file, b_file)
+    else:
+        app.run(debug=True)
+        print "running regular webserver (without training), the clusters will be loaded from previous runs!\n" \
+              "please be sure you applied ExtractCB first"
+        found = cacheLookup()
+        if not found:
+            print "no cached data found! Plaese run ExtractCB method and then run part 2 again\n" \
+                  "I assumed you will run ExtractCB before running the server handling the post requests"
+
+            exit(1)
+
+
+
