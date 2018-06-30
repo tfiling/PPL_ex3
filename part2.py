@@ -3,10 +3,13 @@ import pandas as pd
 from part1 import parseProfiles
 from time import gmtime, strftime
 from multiprocessing import Pool
+import math
+
+MAX_THREAD_POOL = 6
 
 
 def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersClusteringPath = "U.csv", itemsClusteringPath = "V.csv",  codebookPath = "B.csv"):
-    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles
+    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles, globalRatingsCount
     l = k
     np.random.seed(10)#TODO remove seed
 
@@ -20,6 +23,7 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
     userProfiles, itemProfiles = parseProfiles(ratings)
     dfUserProfiles = pd.DataFrame.from_dict({i: userProfiles[i] for i in userProfiles.keys() }, orient='index', columns=['userID', 'items', 'ratings'])
     dfItemProfiles = pd.DataFrame.from_dict({i: itemProfiles[i] for i in itemProfiles.keys() }, orient='index', columns=['itemID', 'users', 'ratings'])
+    globalRatingsCount = sum(map(len, dfItemProfiles["users"]))
     userCount = len(userProfiles)#TODO remove
     itemCount = len(itemProfiles)
     vArray = pd.DataFrame({"itemID" : itemProfiles.keys(), "cluster" : np.random.randint(0, l-1, len(itemProfiles), int)})
@@ -31,18 +35,19 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
     print strftime("data loaded - %Y-%m-%d %H:%M:%S", gmtime())
 
     # calculate codebook
-    p = Pool(8)
+    p = Pool(MAX_THREAD_POOL)
     indexes = [(i, j) for i in range(0, k) for j in range(0,l)]
     results = p.map(calculateB, indexes)
     p.close()
     for (i, j, result) in results:
         bArray.at[i, j] = result
     print strftime("B calculated %Y-%m-%d %H:%M:%S", gmtime())
-    t = 1
-    currentRMSE = epsilon * 2
-    while t < maxSteps and currentRMSE > epsilon:
+    t = 0
+    currentRMSEDiff = 5  # rate is in range [0,5] this is the maximum theoretical value
+    currentRMSE = 5
+    while t < maxSteps and currentRMSEDiff > epsilon:
         # improve user clusters - steps 8-9
-        p = Pool(8)
+        p = Pool(MAX_THREAD_POOL)
         userIDs = userProfiles.keys()
         newClusters = p.map(getBestUserCluster, userIDs)
         p.close()
@@ -51,7 +56,7 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
         uArray = pd.DataFrame({"userID" : uArrayDict.keys(), "cluster" : uArrayDict.values()})
 
         # calculate codebook - step 10
-        p = Pool(8)
+        p = Pool(MAX_THREAD_POOL)
         indexes = [(i, j) for i in range(0, k) for j in range(0, l)]
         results = p.map(calculateB, indexes)
         p.close()
@@ -60,7 +65,7 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
             bArray.at[i, j] = result
 
         # update item clusters - steps 11-12
-        p = Pool(8)
+        p = Pool(MAX_THREAD_POOL)
         itemIDs = itemProfiles.keys()
         newClusters = p.map(getBestItemCluster, itemIDs)
         p.close()
@@ -69,7 +74,7 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
         vArray = pd.DataFrame({"itemID" : uArrayDict.keys(), "cluster" : uArrayDict.values()})
 
         # calculate codebook - step 13
-        p = Pool(8)
+        p = Pool(MAX_THREAD_POOL)
         indexes = [(i, j) for i in range(0, k) for j in range(0, l)]
         results = p.map(calculateB, indexes)
         p.close()
@@ -77,13 +82,13 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
         for (i, j, result) in results:
             bArray.at[i, j] = result
 
-        # RSME = calculateRSME()
+        newRSME = calculateRSME()
+        currentRMSEDiff = math.fabs(newRSME - currentRMSE)
+        print strftime("new RSME calculated - %Y-%m-%d %H:%M:%S", gmtime())
+        print "old RSME - {} new RSME - {} current diff - {}".format(currentRMSE, newRSME, currentRMSEDiff)
+        currentRMSE = newRSME
 
-
-
-
-
-    print ""
+    print strftime("trainig completed - %Y-%m-%d %H:%M:%S", gmtime())
     return
 
 ###################################################################
@@ -160,17 +165,32 @@ def getBestItemCluster(itemID):
 ## calculateRSME
 ###################################################################
 
-# def calculateRSME():
+def calculateRSME():
+    k = l = 4 #TODO get from global scope
+    p = Pool(MAX_THREAD_POOL)
+    itemIDs = itemProfiles.keys()
+    errorSum = sum(p.map(getErrorSum, itemIDs))
+    p.close()
+    result = math.sqrt(errorSum / globalRatingsCount)
+    return result
 
+def getErrorSum(itemID):
+    l = 4 #TODO get from upper scope
 
+    users = itemProfiles[itemID][1]
+    userRankings = itemProfiles[itemID][2]
+    itemCluster = vArrayDict[itemID]
+    errorSum = 0
+    for i in range(0, len(users)):
+        userID = users[i]
+        rating = userRankings[i]
+        userCluster = uArrayDict[userID]
+        bRating = bArray.at[userCluster, itemCluster]
+        result = (rating - bRating) ** 2
+        errorSum += result
 
-def extractCluster(clusterMap, clusterID):
-    clusterObjects = []
-    for i in range(0, len(clusterMap[0])):
-        if clusterMap[1, i] == clusterID:
-            clusterObjects.append(clusterMap[0, i])
+    return errorSum
 
-    return clusterObjects
 
 
 extractCB("ratings.csv")
