@@ -365,8 +365,8 @@ def getRecommendation(userID, N):
               "all ratings by this user were selected to be in the test dataset and therefore there is not data regarding this user!\n"
               "plese note that each row in the input files had ~80% to be in the train dataset (see splitDataset function)")
     else:
-        user = usersCache[usersCache["userID"] == userID].loc[0].to_dict()
-        userCluster = uArray[uArray["userID"] == userID]["cluster"][0]
+        user = usersCache[usersCache["userID"] == 1][["userID", "items", "ratings"]].iloc[0].to_dict()
+        userCluster = uArray[uArray["userID"] == userID]["cluster"].iloc[0]
         itemsClusterRatings = bArray.loc[userCluster][1:].sort_values(ascending=False)
         alreadyRecommended = user["items"] # prevent recommendation of items the user laready rated
         if type(alreadyRecommended) == str:
