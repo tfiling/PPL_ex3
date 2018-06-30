@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pandas as pd
 import os
@@ -6,21 +7,22 @@ from time import gmtime, strftime
 from multiprocessing import Pool
 import math
 
+from flask import Flask
+from flask import jsonify
+from flask import request
+
+app = Flask(__name__)
+
 MAX_THREAD_POOL = 6
 V_CACHE_FILE_PATH = "v.csv"
 U_CACHE_FILE_PATH = "u.csv"
 B_CACHE_FILE_PATH = "b.csv"
 
 
-def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersClusteringPath = "U.csv", itemsClusteringPath = "V.csv",  codebookPath = "B.csv"):
+def extractCB(ratingsFilePath, k = 20, maxSteps = 10, epsilon = 0.01, usersClusteringPath = U_CACHE_FILE_PATH, itemsClusteringPath = V_CACHE_FILE_PATH,  codebookPath = B_CACHE_FILE_PATH):
     global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles, globalRatingsCount
     l = k
     np.random.seed(10)#TODO remove seed
-
-    found = cacheLookup(k, l)
-    if found:
-        return
-
 
     print strftime("start - %Y-%m-%d %H:%M:%S", gmtime())
     ratings = np.genfromtxt(ratingsFilePath, delimiter=',', dtype=[int, int, float, long])[1:]  # ignore table's title
@@ -99,6 +101,9 @@ def extractCB(ratingsFilePath, k = 4, maxSteps = 10, epsilon = 0.01, usersCluste
     vArray.to_csv(V_CACHE_FILE_PATH)
     uArray.to_csv(U_CACHE_FILE_PATH)
     bArray.to_csv(B_CACHE_FILE_PATH)
+    vArray.to_csv(itemsClusteringPath)
+    uArray.to_csv(usersClusteringPath)
+    bArray.to_csv(codebookPath)
     print strftime("trainig completed - %Y-%m-%d %H:%M:%S", gmtime())
     return
 
@@ -202,7 +207,11 @@ def getErrorSum(itemID):
 
     return errorSum
 
-def cacheLookup(k, l):
+###################################################################
+## cacheLookup
+###################################################################
+
+def cacheLookup():
     found = os.path.isfile(U_CACHE_FILE_PATH) and os.path.isfile(V_CACHE_FILE_PATH) and os.path.isfile(B_CACHE_FILE_PATH)
     if found:
         uArray = pd.read_csv(U_CACHE_FILE_PATH)
@@ -210,4 +219,87 @@ def cacheLookup(k, l):
         bArray = pd.read_csv(B_CACHE_FILE_PATH)
     return found
 
-extractCB("ratings.csv")
+
+###################################################################
+## parseArguments
+###################################################################
+
+def parseArguments(args):
+    if len(args) < 6:
+        raise Exception('Expecting at least 5 arguments: '
+                        'ExtractCB '
+                        '[the rating input file] '
+                        '[U output directory as csv file] '
+                        '[V output directory as csv file] '
+                        '[B output directory as csv file] that dont have default value')
+
+    if len(args) < 9:
+        print "found less arguments than full argument signature:\n" \
+              "Part2.py ExtractCB [the rating input file] [K size] [T size] [ε size] [U output directory as csv file] [V output directory as csv file] [B output directory as csv file]\n" \
+              "according to a faculty answer in the forum, we expect the following signature where missing arguments take the default values:\n" \
+              "Part2.py ExtractCB rating_file=[the rating input file] k=[K size] t=[T size] epsilon=[ε size] u_out=[U output directory as csv file] v_out=[V output directory as csv file] b_out=[B output directory as csv file]\n\n"
+
+        print "required arguments with no default value:\n"\
+                "ExtractCB "\
+                "[the rating input file] "\
+                "[U output directory as csv file] "\
+                "[V output directory as csv file] "\
+                "[B output directory as csv file] that dont have default value"
+
+        rating_file = None
+        u_out = None
+        v_out = None
+        b_out = None
+        k = 20
+        l = 20
+        t = 10
+        epsilon = 0.01
+        splitted = map(lambda arg: arg.split('='), args)
+        splitted = filter(lambda x: len(x) > 1, splitted)
+        for arg in splitted:
+            if arg[0].lower() == "rating_file":
+                rating_file = arg[1]
+            if arg[0].lower() == "u_out":
+                u_out = arg[1]
+            if arg[0].lower() == "v_out":
+                v_out = arg[1]
+            if arg[0].lower() == "b_out":
+                b_out = arg[1]
+            if arg[0].lower() == "k":
+                k = int(arg[1])
+                l = int(arg[1])
+            elif arg[0].lower() == "t":
+                t = int(arg[1])
+            elif arg[0].lower() == "epsilon":
+                epsilon = float(arg[1])
+
+    # No args are missing and will appear in order
+    else:
+        rating_file = args[2]
+        k = l = int(args[3])
+        t = int(args[4])
+        epsilon = float(args[5])
+        u_file = args[6]
+        v_file = args[7]
+        b_file = args[8]
+    return rating_file, k, l, t, epsilon, u_file, v_file, b_file
+
+
+
+
+if __name__ == '__main__':
+    args = sys.argv
+    if len(args) > 1 and args[1] == "ExtractCB":
+        rating_file, k, l, t, epsilon, u_file, v_file, b_file = parseArguments(args)
+        extractCB(rating_file, k, l, t, epsilon, u_file, v_file, b_file)
+    else:
+        print "running regular webserver (without training), the clusters will be loaded from previous runs!\n" \
+              "please be sure you applied ExtractCB first"
+
+    found = cacheLookup()
+    if not found:
+        print "no cached data found! Plaese run ExtractCB method and then run part 2 again\n" \
+              "I assumed you will run ExtractCB before running the server handling the post requests"
+        exit(1)
+
+    app.run(debug=True)
