@@ -337,13 +337,13 @@ def parseArguments(args):
 ## main
 ###################################################################
 
-app.run(debug=True)
 if __name__ == '__main__':
     args = sys.argv
     if len(args) > 1 and args[1] == "ExtractCB":
         rating_file, k, t, epsilon, u_file, v_file, b_file = parseArguments(args)
         extractCB(rating_file, k, t, epsilon, u_file, v_file, b_file)
     else:
+        app.run(debug=True)
         print "running regular webserver (without training), the clusters will be loaded from previous runs!\n" \
               "please be sure you applied ExtractCB first"
 
