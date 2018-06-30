@@ -19,23 +19,33 @@ U_CACHE_FILE_PATH = "u.csv"
 B_CACHE_FILE_PATH = "b.csv"
 
 
-def extractCB(ratingsFilePath, k = 20, maxSteps = 10, epsilon = 0.01, usersClusteringPath = U_CACHE_FILE_PATH, itemsClusteringPath = V_CACHE_FILE_PATH,  codebookPath = B_CACHE_FILE_PATH):
-    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, globalSystemRatingsAverage, vArrayDict, uArrayDict, userProfiles, itemProfiles, globalRatingsCount
+def extractCB(ratingsFilePath, _k = 20, maxSteps = 10, epsilon = 0.01, usersClusteringPath = U_CACHE_FILE_PATH, itemsClusteringPath = V_CACHE_FILE_PATH,  codebookPath = B_CACHE_FILE_PATH):
+    # IMPORTANT NOTE
+    # To be able parallel comutation in my implementation I had to use multiprocessing.Pool
+    # this library creates additional processes that can use additional CPU cores.
+    # using thread will limit me to one process, therefor I had to use multiple python process as Pool does
+    # due to a bug in python 2.7 you can run only global functions in child process
+    # which forced me to implement to define the parallel functions in global scope and therefor make the below variables to be global
+    # (did not find a proper way implementing parallel calculation inside a class since it was suffering the same issue)
+    global dfUserProfiles, dfItemProfiles, vArray, uArray, bArray, \
+        globalSystemRatingsAverage, vArrayDict, uArrayDict, \
+        userProfiles, itemProfiles, globalRatingsCount, k, l, \
+        testItemProfiles, testGlobalRatingCount
+    k = _k
     l = k
     np.random.seed(10)#TODO remove seed
 
     print strftime("start - %Y-%m-%d %H:%M:%S", gmtime())
-    ratings = np.genfromtxt(ratingsFilePath, delimiter=',', dtype=[int, int, float, long])[1:]  # ignore table's title
+    trainRatings, testRatings, allRatings = splitDataset(ratingsFilePath)
+    testItemProfiles, testGlobalRatingCount = extractRequiredTestDataStructures(testRatings)
 
     # ratings is a list of tuples where the 3rd(f2) element is the rating - extract a series of the ratings and get the mean(average) of that series
-    globalSystemRatingsAverage = pd.DataFrame.from_records(ratings, exclude=['f0', 'f1', 'f3'])['f2'].mean()
+    globalSystemRatingsAverage = pd.DataFrame.from_records(allRatings.values, exclude=['f0', 'f1', 'f3'])['f2'].mean()
 
-    userProfiles, itemProfiles = parseProfiles(ratings)
+    userProfiles, itemProfiles = parseProfiles(trainRatings.values)
     dfUserProfiles = pd.DataFrame.from_dict({i: userProfiles[i] for i in userProfiles.keys() }, orient='index', columns=['userID', 'items', 'ratings'])
     dfItemProfiles = pd.DataFrame.from_dict({i: itemProfiles[i] for i in itemProfiles.keys() }, orient='index', columns=['itemID', 'users', 'ratings'])
     globalRatingsCount = sum(map(len, dfItemProfiles["users"]))
-    userCount = len(userProfiles)#TODO remove
-    itemCount = len(itemProfiles)
     vArray = pd.DataFrame({"itemID" : itemProfiles.keys(), "cluster" : np.random.randint(0, l-1, len(itemProfiles), int)})
     vArrayDict = vArray.set_index("itemID")["cluster"].to_dict()
     uArray = pd.DataFrame({"userID" : userProfiles.keys(), "cluster" : np.random.randint(0, k - 1, len(userProfiles), int)})
@@ -107,6 +117,23 @@ def extractCB(ratingsFilePath, k = 20, maxSteps = 10, epsilon = 0.01, usersClust
     print strftime("trainig completed - %Y-%m-%d %H:%M:%S", gmtime())
     return
 
+
+
+def extractRequiredTestDataStructures(testRatings):
+    testUserProfiles, testItemProfiles = parseProfiles(testRatings.values)
+    dfItemProfiles = pd.DataFrame.from_dict({i: itemProfiles[i] for i in itemProfiles.keys() }, orient='index', columns=['itemID', 'users', 'ratings'])
+    testGlobalRatingsCount = sum(map(len, dfItemProfiles["users"]))
+    return testItemProfiles, testGlobalRatingCount
+
+def splitDataset(ratingsFilePath):
+    dataset = pd.read_csv(ratingsFilePath)
+    # randomly select 80% of the dataset to be train dataset and the rest to be test dataset
+    df = pd.DataFrame(np.random.randn(len(dataset), 2))
+    mask = np.random.rand(len(df)) < 0.8
+    train = dataset[mask]
+    test = dataset[~mask]
+    return train, test, dataset
+
 ###################################################################
 ## calcualteB
 ###################################################################
@@ -127,7 +154,7 @@ def calculateB((i, j)):
         result = sum / ratingsCount
     else:
         result = globalSystemRatingsAverage
-    return (i, j, result)
+    return 1(i, j, result)
 
 
 
@@ -136,7 +163,6 @@ def calculateB((i, j)):
 ###################################################################
 
 def getBestUserCluster(userID):
-    k = 4  # TODO get from upper scope
     items = userProfiles[userID][1]
     itemRankings = userProfiles[userID][2]
     clusterErrors = np.zeros(k)
@@ -159,8 +185,6 @@ def getBestUserCluster(userID):
 ###################################################################
 
 def getBestItemCluster(itemID):
-    l = 4 #TODO get from upper scope
-
     users = itemProfiles[itemID][1]
     userRankings = itemProfiles[itemID][2]
     clusterErrors = np.zeros(l)
@@ -180,21 +204,17 @@ def getBestItemCluster(itemID):
 ###################################################################
 ## calculateRSME
 ###################################################################
-
 def calculateRSME():
-    k = l = 4 #TODO get from global scope
     p = Pool(MAX_THREAD_POOL)
-    itemIDs = itemProfiles.keys()
+    itemIDs = testItemProfiles.keys()
     errorSum = sum(p.map(getErrorSum, itemIDs))
     p.close()
-    result = math.sqrt(errorSum / globalRatingsCount)
+    result = math.sqrt(errorSum / testGlobalRatingCount)
     return result
 
 def getErrorSum(itemID):
-    l = 4 #TODO get from upper scope
-
-    users = itemProfiles[itemID][1]
-    userRankings = itemProfiles[itemID][2]
+    users = testItemProfiles[itemID][1]
+    userRankings = testItemProfiles[itemID][2]
     itemCluster = vArrayDict[itemID]
     errorSum = 0
     for i in range(0, len(users)):
@@ -235,9 +255,26 @@ def parseArguments(args):
 
     if len(args) < 9:
         print "found less arguments than full argument signature:\n" \
-              "Part2.py ExtractCB [the rating input file] [K size] [T size] [ε size] [U output directory as csv file] [V output directory as csv file] [B output directory as csv file]\n" \
-              "according to a faculty answer in the forum, we expect the following signature where missing arguments take the default values:\n" \
-              "Part2.py ExtractCB rating_file=[the rating input file] k=[K size] t=[T size] epsilon=[ε size] u_out=[U output directory as csv file] v_out=[V output directory as csv file] b_out=[B output directory as csv file]\n\n"
+              "Part2.py " \
+              "ExtractCB " \
+              "[the rating input file] " \
+              "[K size] " \
+              "[T size] "\
+              "[epsilon size] " \
+              "[U output directory as csv file] " \
+              "[V output directory as csv file] " \
+              "[B output directory as csv file]\n"\
+              "according to a faculty answer in the forum, " \
+              "we expect the following signature where missing arguments take the default values:\n" \
+              "Part2.py " \
+              "ExtractCB " \
+              "rating_file=[the rating input file] " \
+              "k=[K size] " \
+              "t=[T size] " \
+              "epsilon=[epsilon size] " \
+              "u_out=[U output directory as csv file] " \
+              "v_out=[V output directory as csv file] " \
+              "b_out=[B output directory as csv file]\n\n"
 
         print "required arguments with no default value:\n"\
                 "ExtractCB "\
@@ -291,7 +328,7 @@ def parseArguments(args):
         u_file = args[6]
         v_file = args[7]
         b_file = args[8]
-    return rating_file, k, l, t, epsilon, u_file, v_file, b_file
+    return rating_file, k, t, epsilon, u_file, v_file, b_file
 
 
 
@@ -299,8 +336,8 @@ def parseArguments(args):
 if __name__ == '__main__':
     args = sys.argv
     if len(args) > 1 and args[1] == "ExtractCB":
-        rating_file, k, l, t, epsilon, u_file, v_file, b_file = parseArguments(args)
-        extractCB(rating_file, k, l, t, epsilon, u_file, v_file, b_file)
+        rating_file, k, t, epsilon, u_file, v_file, b_file = parseArguments(args)
+        extractCB(rating_file, k, t, epsilon, u_file, v_file, b_file)
     else:
         print "running regular webserver (without training), the clusters will be loaded from previous runs!\n" \
               "please be sure you applied ExtractCB first"
