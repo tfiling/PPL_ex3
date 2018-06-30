@@ -35,7 +35,6 @@ def extractCB(ratingsFilePath, _k = 20, maxSteps = 10, epsilon = 0.01, usersClus
         testItemProfiles, testGlobalRatingCount
     k = _k
     l = k
-    np.random.seed(10)#TODO remove seed
 
     print strftime("start - %Y-%m-%d %H:%M:%S", gmtime())
     trainRatings, testRatings, allRatings = splitDataset(ratingsFilePath)
@@ -147,7 +146,7 @@ def calculateB((i, j)):
     clusterUsers = pd.merge(clusterUsers, dfUserProfiles, how='inner')
     sum = 0
     ratingsCount = 0
-    for index, row in clusterUsers.iterrows():# TODO can be improved
+    for index, row in clusterUsers.iterrows(): # gal can be improved - seems like a bottleneck
         ratings = pd.DataFrame({"itemID" : row["items"], "ratings" : row["ratings"]})
         ratings = pd.merge(itemsIDs, ratings, how='inner', on='itemID')
         sum += ratings["ratings"].sum()
