@@ -40,7 +40,7 @@ def extractCB(ratingsFilePath, _k = 20, maxSteps = 10, epsilon = 0.01, usersClus
     testItemProfiles, testGlobalRatingCount = extractRequiredTestDataStructures(testRatings)
 
     # ratings is a list of tuples where the 3rd(f2) element is the rating - extract a series of the ratings and get the mean(average) of that series
-    globalSystemRatingsAverage = pd.DataFrame.from_records(allRatings.values, exclude=['f0', 'f1', 'f3'])['f2'].mean()
+    globalSystemRatingsAverage = allRatings['rating'].mean()
 
     userProfiles, itemProfiles = parseProfiles(trainRatings.values)
     dfUserProfiles = pd.DataFrame.from_dict({i: userProfiles[i] for i in userProfiles.keys() }, orient='index', columns=['userID', 'items', 'ratings'])
@@ -121,8 +121,8 @@ def extractCB(ratingsFilePath, _k = 20, maxSteps = 10, epsilon = 0.01, usersClus
 
 def extractRequiredTestDataStructures(testRatings):
     testUserProfiles, testItemProfiles = parseProfiles(testRatings.values)
-    dfItemProfiles = pd.DataFrame.from_dict({i: itemProfiles[i] for i in itemProfiles.keys() }, orient='index', columns=['itemID', 'users', 'ratings'])
-    testGlobalRatingsCount = sum(map(len, dfItemProfiles["users"]))
+    dfItemProfiles = pd.DataFrame.from_dict({i: testItemProfiles[i] for i in testItemProfiles.keys() }, orient='index', columns=['itemID', 'users', 'ratings'])
+    testGlobalRatingCount = sum(map(len, dfItemProfiles["users"]))
     return testItemProfiles, testGlobalRatingCount
 
 def splitDataset(ratingsFilePath):
@@ -154,7 +154,7 @@ def calculateB((i, j)):
         result = sum / ratingsCount
     else:
         result = globalSystemRatingsAverage
-    return 1(i, j, result)
+    return (i, j, result)
 
 
 
