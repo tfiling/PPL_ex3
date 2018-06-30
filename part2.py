@@ -213,17 +213,18 @@ def calculateRSME():
     return result
 
 def getErrorSum(itemID):
-    users = testItemProfiles[itemID][1]
-    userRankings = testItemProfiles[itemID][2]
-    itemCluster = vArrayDict[itemID]
     errorSum = 0
-    for i in range(0, len(users)):
-        userID = users[i]
-        rating = userRankings[i]
-        userCluster = uArrayDict[userID]
-        bRating = bArray.at[userCluster, itemCluster]
-        result = (rating - bRating) ** 2
-        errorSum += result
+    if testItemProfiles.has_key(itemID) and vArrayDict.has_key(itemID):
+        users = testItemProfiles[itemID][1]
+        userRankings = testItemProfiles[itemID][2]
+        itemCluster = vArrayDict[itemID]
+        for i in range(0, len(users)):
+            userID = users[i]
+            rating = userRankings[i]
+            userCluster = uArrayDict[userID]
+            bRating = bArray.at[userCluster, itemCluster]
+            result = (rating - bRating) ** 2
+            errorSum += result
 
     return errorSum
 
