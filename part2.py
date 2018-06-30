@@ -273,6 +273,15 @@ def parseArguments(args):
             elif arg[0].lower() == "epsilon":
                 epsilon = float(arg[1])
 
+        if rating_file is None:
+            raise Exception("rating_file=<value> argument is missing, no default value was assigned for the argument!")
+        if u_out is None:
+            raise Exception("u_out=<value> argument is missing, no default value was assigned for the argument!")
+        if v_out is None:
+            raise Exception("v_out=<value> argument is missing, no default value was assigned for the argument!")
+        if b_out is None:
+            raise Exception("b_out=<value> argument is missing, no default value was assigned for the argument!")
+
     # No args are missing and will appear in order
     else:
         rating_file = args[2]
